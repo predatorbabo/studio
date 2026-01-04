@@ -6,37 +6,38 @@ import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 
 export default function HomePage() {
-  const { user, loading } = useAuth();
+  const { user, loading, profileLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    // Wait until loading is false
     if (loading) {
-      return;
+      return; // Wait for auth state to load
     }
-
-    // If there's no user, redirect to login
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // If user exists, but profile is not yet loaded, wait.
-    if (!user.profile) {
-      return; 
+    // User is logged in, but we need to wait for their profile to load.
+    if (profileLoading) {
+      return;
     }
 
-    const { role, profileComplete } = user.profile;
-
-    if (role && profileComplete) {
-      router.replace(role === 'driver' ? '/driver' : '/owner');
-    } else if (role) {
-      router.replace(role === 'driver' ? '/driver/profile' : '/owner/profile');
-    } else {
-      router.replace('/select-role');
+    // At this point, user is loaded and profile is either loaded or doesn't exist.
+    if (user.profile) {
+      const { role, profileComplete } = user.profile;
+      if (!role) {
+        router.replace('/select-role');
+      } else if (!profileComplete) {
+        router.replace(role === 'driver' ? '/driver/profile' : '/owner/profile');
+      } else {
+        router.replace(role === 'driver' ? '/driver' : '/owner');
+      }
     }
+    // The AuthProvider will handle creating the profile if it doesn't exist,
+    // and this component will re-render.
 
-  }, [user, loading, router]);
+  }, [user, loading, profileLoading, router]);
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background">

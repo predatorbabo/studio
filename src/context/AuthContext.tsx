@@ -2,68 +2,81 @@
 
 import { createContext, useState, useEffect, ReactNode } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { AppUser, UserProfile } from '@/lib/types';
-import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
   user: AppUser | null;
   loading: boolean;
+  profileLoading: boolean;
 }
 
 export const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  profileLoading: true,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const [profileLoading, setProfileLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       setLoading(true);
+      setProfileLoading(true);
+
       if (firebaseUser) {
         const userRef = doc(db, 'users', firebaseUser.uid);
         const userSnap = await getDoc(userRef);
 
-        if (userSnap.exists()) {
-          const userProfile = userSnap.data() as UserProfile;
-          setUser({ ...firebaseUser, profile: userProfile });
-        } else {
-          // New user, create a document for them.
-          const newUserProfile: UserProfile = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            role: null,
-            createdAt: serverTimestamp() as any, // Will be converted by Firestore
-            profileComplete: false,
-          };
-          try {
-            await setDoc(userRef, newUserProfile);
-            // Re-fetch to get server timestamp correctly
-            const newUserSnap = await getDoc(userRef);
-            if (newUserSnap.exists()) {
-                setUser({ ...firebaseUser, profile: newUserSnap.data() as UserProfile });
-            }
-          } catch (error) {
-            console.error("Error creating user document:", error);
-            // Handle error (e.g., sign out user)
-            setUser(null);
-          }
+        if (!userSnap.exists()) {
+           try {
+            await setDoc(userRef, {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                role: null,
+                createdAt: serverTimestamp(),
+                profileComplete: false,
+            });
+           } catch (error) {
+             console.error("Error creating user document:", error);
+           }
         }
+        
+        // Now set up a real-time listener for the user's profile
+        const unsubscribeSnapshot = onSnapshot(userRef, (doc) => {
+            if (doc.exists()) {
+                setUser({ ...firebaseUser, profile: doc.data() as UserProfile });
+            } else {
+                // This case should ideally not happen after the check above, but as a safeguard:
+                setUser({ ...firebaseUser, profile: undefined });
+            }
+            setProfileLoading(false);
+        }, (error) => {
+            console.error("Error listening to user profile:", error);
+            setUser({ ...firebaseUser, profile: undefined });
+            setProfileLoading(false);
+        });
+
+        setLoading(false);
+        
+        // Return the snapshot listener's unsubscribe function
+        return () => unsubscribeSnapshot();
+
       } else {
         setUser(null);
+        setLoading(false);
+        setProfileLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
-  }, [router]);
+    return () => unsubscribeAuth();
+  }, []);
 
-  const value = { user, loading };
+  const value = { user, loading, profileLoading };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
