@@ -10,28 +10,31 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
+    // Wait until loading is false
     if (loading) {
       return;
     }
 
+    // If there's no user, redirect to login
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    const { role, profileComplete } = user.profile || {};
-
-    if (!role) {
-      router.replace('/select-role');
-      return;
+    // If user exists, but profile is not yet loaded, wait.
+    if (!user.profile) {
+      return; 
     }
 
-    if (!profileComplete) {
+    const { role, profileComplete } = user.profile;
+
+    if (role && profileComplete) {
+      router.replace(role === 'driver' ? '/driver' : '/owner');
+    } else if (role) {
       router.replace(role === 'driver' ? '/driver/profile' : '/owner/profile');
-      return;
+    } else {
+      router.replace('/select-role');
     }
-    
-    router.replace(role === 'driver' ? '/driver' : '/owner');
 
   }, [user, loading, router]);
 
