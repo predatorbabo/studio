@@ -72,7 +72,7 @@ export default function SignUpPage() {
       <Card>
         <CardHeader>
           <CardTitle>Create an Account</CardTitle>
-          <CardDescription>Join T-Tow Simplified today.</CardDescription>
+          <CardDescription>Join T-TOW today.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
