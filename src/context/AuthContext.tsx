@@ -25,33 +25,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      setLoading(true);
-      setProfileLoading(true);
-
       if (firebaseUser) {
         const userRef = doc(db, 'users', firebaseUser.uid);
-        const userSnap = await getDoc(userRef);
-
-        if (!userSnap.exists()) {
-           try {
-            await setDoc(userRef, {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email,
-                role: null,
-                createdAt: serverTimestamp(),
-                profileComplete: false,
-            });
-           } catch (error) {
-             console.error("Error creating user document:", error);
-           }
-        }
         
-        // Now set up a real-time listener for the user's profile
-        const unsubscribeSnapshot = onSnapshot(userRef, (doc) => {
+        // Set up a real-time listener for the user's profile
+        const unsubscribeSnapshot = onSnapshot(userRef, async (doc) => {
             if (doc.exists()) {
                 setUser({ ...firebaseUser, profile: doc.data() as UserProfile });
             } else {
-                // This case should ideally not happen after the check above, but as a safeguard:
+                // If the document doesn't exist, create it.
+                // This might happen on first sign-up.
+                try {
+                  await setDoc(userRef, {
+                      uid: firebaseUser.uid,
+                      email: firebaseUser.email,
+                      role: null,
+                      createdAt: serverTimestamp(),
+                      profileComplete: false,
+                  });
+                } catch (error) {
+                  console.error("Error creating user document:", error);
+                }
+                // The snapshot listener will fire again once the doc is created.
+                // For now, we set the profile as undefined.
                 setUser({ ...firebaseUser, profile: undefined });
             }
             setProfileLoading(false);
@@ -63,7 +59,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setLoading(false);
         
-        // Return the snapshot listener's unsubscribe function
         return () => unsubscribeSnapshot();
 
       } else {

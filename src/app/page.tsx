@@ -10,35 +10,34 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (loading) {
-      return; // Wait for auth state to load
+    // Wait until initial auth check and profile loading is complete.
+    if (loading || profileLoading) {
+      return;
     }
+
+    // If there's no user, redirect to login.
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // User is logged in, but we need to wait for their profile to load.
-    if (profileLoading) {
-      return;
-    }
-
-    // At this point, user is loaded and profile is either loaded or doesn't exist.
-    if (user.profile) {
+    // If user is authenticated, but profile is not loaded or incomplete,
+    // redirect to the appropriate page.
+    if (user && user.profile) {
       const { role, profileComplete } = user.profile;
+
       if (!role) {
-        router.replace('/select-role');
+         router.replace('/select-role');
       } else if (!profileComplete) {
         router.replace(role === 'driver' ? '/driver/profile' : '/owner/profile');
       } else {
         router.replace(role === 'driver' ? '/driver' : '/owner');
       }
     }
-    // The AuthProvider will handle creating the profile if it doesn't exist,
-    // and this component will re-render.
-
+    
   }, [user, loading, profileLoading, router]);
 
+  // Show a loader while authentication and redirection are in progress.
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background">
       <Loader2 className="h-12 w-12 animate-spin text-primary" />
