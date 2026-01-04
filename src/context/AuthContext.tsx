@@ -2,7 +2,7 @@
 
 import { createContext, useState, useEffect, ReactNode } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { AppUser, UserProfile } from '@/lib/types';
 
@@ -24,17 +24,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileLoading, setProfileLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
+        setLoading(false); // Auth check is done.
         const userRef = doc(db, 'users', firebaseUser.uid);
         
-        // Set up a real-time listener for the user's profile
         const unsubscribeSnapshot = onSnapshot(userRef, async (doc) => {
             if (doc.exists()) {
                 setUser({ ...firebaseUser, profile: doc.data() as UserProfile });
+                setProfileLoading(false);
             } else {
-                // If the document doesn't exist, create it.
-                // This might happen on first sign-up.
+                // Profile doesn't exist, create it. This is safe because onAuthStateChanged
+                // and onSnapshot only run on the client-side after initial hydration.
                 try {
                   await setDoc(userRef, {
                       uid: firebaseUser.uid,
@@ -43,25 +44,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                       createdAt: serverTimestamp(),
                       profileComplete: false,
                   });
+                  // The snapshot listener will automatically pick up the new profile,
+                  // so we don't need to manually set user state here.
                 } catch (error) {
                   console.error("Error creating user document:", error);
+                  // If creation fails, set user without profile to avoid loops.
+                  setUser({ ...firebaseUser, profile: undefined });
+                  setProfileLoading(false);
                 }
-                // The snapshot listener will fire again once the doc is created.
-                // For now, we set the profile as undefined.
-                setUser({ ...firebaseUser, profile: undefined });
             }
-            setProfileLoading(false);
         }, (error) => {
-            console.error("Error listening to user profile:", error);
+            console.error("Error with profile snapshot:", error);
             setUser({ ...firebaseUser, profile: undefined });
             setProfileLoading(false);
         });
 
-        setLoading(false);
-        
         return () => unsubscribeSnapshot();
-
       } else {
+        // No user is signed in.
         setUser(null);
         setLoading(false);
         setProfileLoading(false);

@@ -10,29 +10,34 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Wait until initial auth check and profile loading is complete.
+    // Wait until both auth and profile loading are complete
     if (loading || profileLoading) {
       return;
     }
 
-    // If there's no user, redirect to login.
+    // If there's no user, they should be at the login page.
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // If user is authenticated, but profile is not loaded or incomplete,
-    // redirect to the appropriate page.
-    if (user && user.profile) {
-      const { role, profileComplete } = user.profile;
+    // If we have a user, but their profile isn't loaded yet,
+    // they might be a new user. We wait for the profile to load.
+    // The AuthProvider is creating the profile if it's missing.
+    // Once profile is loaded, this effect will run again.
+    if (!user.profile) {
+      // This state shouldn't last long, but we'll wait here.
+      return;
+    }
 
-      if (!role) {
-         router.replace('/select-role');
-      } else if (!profileComplete) {
-        router.replace(role === 'driver' ? '/driver/profile' : '/owner/profile');
-      } else {
-        router.replace(role === 'driver' ? '/driver' : '/owner');
-      }
+    const { role, profileComplete } = user.profile;
+
+    if (!role) {
+       router.replace('/select-role');
+    } else if (!profileComplete) {
+      router.replace(role === 'driver' ? '/driver/profile' : '/owner/profile');
+    } else {
+      router.replace(role === 'driver' ? '/driver' : '/owner');
     }
     
   }, [user, loading, profileLoading, router]);
